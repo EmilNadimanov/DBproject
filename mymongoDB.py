@@ -22,7 +22,7 @@ class MyMongoDB:
         else:
             raise MongoException("collections must NOT start with double underscore!")
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> MyMongoCollection:
         if item in self.__collections.keys():
             return self.__collections[item]
         else:

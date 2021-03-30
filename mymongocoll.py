@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import Dict, Union, MutableMapping, Iterable, Any, MutableSet, List, \
-    Tuple
+    Tuple, Callable, Literal
 
 from aux import MongoLastInserted, MongoException
 from mymongodoc import\
@@ -11,17 +11,17 @@ from sortedcontainers import SortedDict, SortedKeyList, SortedSet
 
 # alias
 FieldName = str
-
+Bool = Literal[True, False]
 
 class MyMongoCollection:
 
     def __init__(self, database, name: str):
         from mymongoDB import MyMongoDB
 
-        self.name: str = name
         if not isinstance(database, MyMongoDB):
             raise MongoException(
-                "You fool! What is this disgusting thing that you pass to constructor method?")
+                "Only MongoDB objects can be passed as the database argument")
+        self.name: str = name
         self.parent_database: MyMongoDB = database
         # сортирован по ключам словарей
         self.__docs: SortedKeyList[MongoId, MyMongoDoc] = SortedKeyList(key=lambda doc: doc['objectId'])
@@ -66,6 +66,7 @@ class MyMongoCollection:
                 f"Duplicate key error: document already in collection {new_doc}")
         else:
             self.__reserved_ids.add(new_doc.objectId)
+
         self.__docs.add(new_doc)
 
         return MongoLastInserted(new_doc)
@@ -75,7 +76,7 @@ class MyMongoCollection:
         if isinstance(docs[0], dict) or issubclass(docs[0].__class__, MutableMapping):
             pass
         # любой другой iterable на свой страх и риск
-        elif hasattr(docs[0], "__iter__"):
+        elif hasattr(docs[0], "__iter__") and len(docs) == 1:
             docs = docs[0]
         else:
             raise MongoException(f"Function accepts iterables of dicts or a type that inherits from "
@@ -88,13 +89,19 @@ class MyMongoCollection:
         try:
             if isinstance(object_id, MongoId):
                 self.__reserved_ids.remove(object_id)
+
+                # найдём объект для удаления в теле коллекции документов по его MongoId, используя
+                # куклу с таким же индексом
                 dummy = {"objectId": object_id}
+                object_idx: int = self.__docs.bisect_left(dummy)
+                doc: MyMongoDoc = self.__docs[object_idx]
+
                 # очистим индексы от удаляемого объекта
                 for field in self.__indices.keys():
-                    obj_idx = self.__indices[field].bisect_left(dummy)
-                    self.__indices['objectId'].remove(obj_idx)
-                obj_idx = self.__docs.bisect_left(dummy)
-                self.__docs.pop(obj_idx)
+                    if field in doc.keys():
+                        obj_idx = self.__indices[field].bisect_left(doc)
+                        self.__indices[field].remove(obj_idx)
+                self.__docs.pop(object_idx)
             else:
                 raise TypeError(
                     "Only instances of MongoId can serve as document identifiers.")
@@ -108,6 +115,8 @@ class MyMongoCollection:
 
     def clear(self):
         self.__docs.clear()
+        self.__indices.clear()
+        self.__reserved_ids.clear()
 
     def find_one(self, query: Dict[str, Any]):
         result = None
@@ -138,6 +147,37 @@ class MyMongoCollection:
             try:
                 boolean = [candidate[key] ==
                            value for key, value in _query.items()]
+                if all(boolean):
+                    result.append(candidate)
+            except KeyError:
+                pass
+        return list(result)
+
+    def find_and_update(self, filter_, update_: Dict[FieldName, Any]) -> None:
+        docs = self.find(filter_)
+        for doc in docs:
+            for k, v in update_.items():
+                doc[k] = v
+        return docs
+
+    def find_one_and_update(self, filter_, update_: Dict[FieldName, Any]) -> None:
+        doc = self.find_one(filter_)
+        for k, v in update_.items():
+            doc[k] = v
+        return doc
+
+    def query(self, where: MutableMapping[FieldName, Callable[..., Bool]]) -> Iterable[MyMongoDoc]:
+        result = list()
+        relevant_docs, _query = self.__get_relevant_info(where)
+        if len(_query) == 0:
+            return list(relevant_docs)
+        else:
+            # уменьшаем количество документов для поиска
+            relevant_docs = iter(relevant_docs)
+        for candidate in relevant_docs:
+            try:
+                boolean = [function(candidate[key])
+                           for key, function in _query.items()]
                 if all(boolean):
                     result.append(candidate)
             except KeyError:

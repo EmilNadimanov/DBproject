@@ -60,7 +60,7 @@ class MongoIdEncoder(json.JSONEncoder):
 
 class MyMongoDoc(MutableMapping):
     def __init__(self, mongo_id: 'MongoId',
-                 body: Optional[Union[MutableMapping, Dict]] = None):
+                 body: Optional[MutableMapping] = None):
         self.objectId: Final[MongoId] = mongo_id
 
         if body is None:
@@ -114,11 +114,11 @@ class MyMongoDocFactory:
     # но в то же время хранить как защищённое поле этого Factory-объекта
     @staticmethod
     def get_doc(
-            data: Optional[Union[Dict, MutableMapping]] = None) -> MyMongoDoc:
+            data: Optional[MutableMapping] = None) -> MyMongoDoc:
         data_id: str = hex(id(data))[2:]
         mongo_id: MongoId = MongoId(data_id)
         if data is None:
             return MyMongoDoc(mongo_id)
         else:
-            d = deepcopy(data)
+            d: MutableMapping = deepcopy(data)
             return MyMongoDoc(mongo_id, d)

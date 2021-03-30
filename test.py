@@ -5,16 +5,15 @@ from mymongocoll import MyMongoCollection
 from mymongodoc import MyMongoDoc, MongoId
 from mymongoDB import MyMongoDB
 import datetime
-
 # CREATE DATABASE
-mmdb = MyMongoDB("my_db")
+mmdb: MyMongoDB = MyMongoDB("my_db")
 
 
 
 # CREATE COLLECTION
 
 # нет коллекции "тест" - создадим её
-mmc = mmdb.test
+mmc: MyMongoCollection = mmdb.test
 
 assert mmc.parent_database == mmdb
 assert mmc.name == "test"
@@ -42,18 +41,18 @@ assert last_one == found.objectId
 # INSERT MANY
 post_1 = {"author": "Dwight",
           "text": "Beets, Bears, Battlestar Galactica",
-          "tags": ["co-manager", "paper", "Dunder-Mifflin"],
+          "tags": ["assistant manager", "paper", "Dunder-Mifflin"],
           "date": datetime.datetime.now()}
 
 post_2 = {"author": "Kevin",
-          "text": "Why say lot word but few word do trick",
+          "text": "Why say lot word when few word do trick",
           "tags": ["chili", "accounting", "women"],
           "date": datetime.datetime.now()}
 
 last_ones = mmc.insert_many(post_1, post_2)
 
 assert len(mmc) == 3
-
+mmc.find_and_update({"author": "Kevin"}, {"text": "FOOO"})
 # CANNOT INSERT THE SAME OBJECT
 
 try:
@@ -84,17 +83,19 @@ with open('data.json5') as f:
     j = json.loads(f.read())
 
 events = j['result']['events']
-
-
-# FIND ONE
-
-
 t = time.time()
 mmc.clear()
 mmc.insert_many(events)
 print(time.time() - t)
 
 #FIND
+tmp = {
+        "description": "SQUIBBLEZ",
+        "lang": "en",
+        "category1": "February",
+        "granularity": "year"
+      }
+mmc.insert_one(tmp)
 
 t1 = time.time()
 mmc.find({"date": 2012, "category_1": "June"})
@@ -122,4 +123,5 @@ mmdb = MyMongoDB.load("MyMongoShenanigans.mongodb")
 all_the_good_stuff = mmdb.list_collections()
 
 all_the_data = mmdb[all_the_good_stuff[0]]
-a = 1
+
+anchor = 1
